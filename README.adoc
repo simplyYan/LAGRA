@@ -1,6 +1,6 @@
 = LAGRA: A Go Logging Library
 
-image::logo.png[LAGRA Logo]
+image::lagra.png[LAGRA Logo]
 
 == Description
 
