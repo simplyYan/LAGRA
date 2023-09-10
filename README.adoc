@@ -15,41 +15,9 @@ To get started with LAGRA, you can add it to your Go project using `go get`:
 go get github.com/NervousGroove/LAGRA
 ----
 
-== Usage Example
+== Documentation
 
-Here's a simple example of how to use LAGRA to log a message:
-
-[source,go]
-----
-package main
-
-import (
-	"lagra"
-)
-
-func main() {
-	// Create a new instance of Lagra
-	logger := lagra.New()
-
-	// Send an INFO log message
-	infoLog := logger.send(lagra.Info)
-	infoLog("This is an INFO log message")
-
-	// Send a WARN log message
-	warnLog := logger.send(lagra.Warn)
-	warnLog("This is a WARN log message")
-
-	// Send an ERROR log message
-	errorLog := logger.send(lagra.Error)
-	errorLog("This is an ERROR log message")
-
-	// Save the log to a file
-	logger.save()
-
-	// Close the log file
-	logger.Close()
-}
-----
+To read the documentation, go to https://github.com/NervousGroove/LAGRA/wiki/Documentation
 
 == Features and Advantages
 
