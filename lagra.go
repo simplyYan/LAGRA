@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -18,7 +19,8 @@ const (
 )
 
 type Lagra struct {
-	logFile *os.File
+	logFile  *os.File
+	logMutex sync.Mutex
 }
 
 func New() *Lagra {
@@ -26,23 +28,26 @@ func New() *Lagra {
 }
 
 func (l *Lagra) send(logType LogType) func(ctx context.Context, message string) error {
-	var textColor *color.Color
-
-	switch logType {
-	case Info:
-		textColor = color.New(color.FgGreen)
-	case Warn:
-		textColor = color.New(color.FgYellow)
-	case Error:
-		textColor = color.New(color.FgRed)
-	default:
-		textColor = color.New(color.Reset)
-	}
-
 	return func(ctx context.Context, message string) error {
+		l.logMutex.Lock()
+		defer l.logMutex.Unlock()
+
 		logMessage := fmt.Sprintf("%s - %s - %s\n", time.Now().Format("15:04.05.9 - 02/01/2006"), logType, message)
-		textColor.Print(logMessage)
-		fmt.Print(logMessage) // Imprime sem cores no arquivo de log
+
+		var textColor *color.Color
+		switch logType {
+		case Info:
+			textColor = color.New(color.FgGreen)
+		case Warn:
+			textColor = color.New(color.FgYellow)
+		case Error:
+			textColor = color.New(color.FgRed)
+		default:
+			textColor = color.New(color.Reset)
+		}
+
+		logMessageColored := textColor.SprintFunc()(logMessage)
+		fmt.Print(logMessageColored) // Imprime com cores
 
 		if l.logFile != nil {
 			_, err := l.logFile.WriteString(logMessage)
@@ -71,6 +76,9 @@ func (l *Lagra) Error(ctx context.Context, message string) error {
 }
 
 func (l *Lagra) save() error {
+	l.logMutex.Lock()
+	defer l.logMutex.Unlock()
+
 	if l.logFile == nil {
 		var err error
 		l.logFile, err = os.Create("log.lagra")
@@ -82,6 +90,9 @@ func (l *Lagra) save() error {
 }
 
 func (l *Lagra) Close() error {
+	l.logMutex.Lock()
+	defer l.logMutex.Unlock()
+
 	if l.logFile != nil {
 		err := l.logFile.Close()
 		if err != nil {
