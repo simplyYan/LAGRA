@@ -42,3 +42,5 @@ LAGRA offers several features and advantages that make it a solid choice for you
 9. *Active Community*: The Go developer community is active and ready to provide support and contributions to LAGRA.
 
 LAGRA is a solid choice for those seeking an efficient, user-friendly, and highly customizable logging solution in Go.
+
+By Wesley Yan Soares Brehmer, CEO/Founder of SwankyNoob
