@@ -12,7 +12,7 @@ To get started with LAGRA, you can add it to your Go project using `go get`:
 
 [source,shell]
 ----
-go get github.com/NervousGroove/LAGRA/yan.lagra
+go get github.com/NervousGroove/LAGRA
 ----
 
 == Usage Example
