@@ -54,8 +54,8 @@ func New(tomlConfig string) (*Lagra, error) {
 	return l, nil
 }
 
-// send logs a message with the specified log type.
-func (l *Lagra) send(logType LogType, message string) error {
+// send logs a message with the specified log type and an optional custom log file path.
+func (l *Lagra) send(logType LogType, message string, customLogPath ...string) error {
 	l.logMutex.Lock()
 	defer l.logMutex.Unlock()
 
@@ -74,31 +74,41 @@ func (l *Lagra) send(logType LogType, message string) error {
 	}
 
 	logMessageColored := textColor.SprintFunc()(logMessage)
-	fmt.Print(logMessageColored) // Imprime com cores
+	fmt.Print(logMessageColored) // Print with colors
 
-	if l.logFile != nil {
-		_, err := l.logFile.WriteString(logMessage)
-		if err != nil {
-			return err // Retornar erro se ocorrer um problema ao escrever no arquivo de log
+	// Use custom log file path if provided, otherwise use the configured log file
+	logFilePath := l.config.LogFile
+	if len(customLogPath) > 0 && customLogPath[0] != "" {
+		logFilePath = customLogPath[0]
+	}
+
+	if logFilePath != "" {
+		if l.logFile != nil {
+			_, err := l.logFile.WriteString(logMessage)
+			if err != nil {
+				return err // Return error if there's an issue writing to the log file
+			}
+		} else {
+			fmt.Println("Log file is not set. Message will not be logged to a file.")
 		}
 	}
 
-	return nil // Sem erro
+	return nil // No error
 }
 
-// Info logs an informational message.
-func (l *Lagra) Info(ctx context.Context, message string) error {
-	return l.send(Info, message)
+// Info logs an informational message with optional custom log file path.
+func (l *Lagra) Info(ctx context.Context, message string, customLogPath ...string) error {
+	return l.send(Info, message, customLogPath...)
 }
 
-// Warn logs a warning message.
-func (l *Lagra) Warn(ctx context.Context, message string) error {
-	return l.send(Warn, message)
+// Warn logs a warning message with optional custom log file path.
+func (l *Lagra) Warn(ctx context.Context, message string, customLogPath ...string) error {
+	return l.send(Warn, message, customLogPath...)
 }
 
-// Error logs an error message.
-func (l *Lagra) Error(ctx context.Context, message string) error {
-	return l.send(Error, message)
+// Error logs an error message with optional custom log file path.
+func (l *Lagra) Error(ctx context.Context, message string, customLogPath ...string) error {
+	return l.send(Error, message, customLogPath...)
 }
 
 // SetLogFile sets the log file path.
