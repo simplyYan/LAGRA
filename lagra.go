@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 	"time"
-
+	"sync/atomic"
 	"github.com/BurntSushi/toml"
 	"github.com/fatih/color"
 )
@@ -23,6 +23,8 @@ type Lagra struct {
 	logFile  *os.File
 	logMutex sync.Mutex
 	config   *LagraConfig
+	logBuffer []string
+	logCounter int32
 }
 
 type LagraConfig struct {
@@ -41,6 +43,7 @@ func New(tomlConfig string) (*Lagra, error) {
 
 	l := &Lagra{
 		config: &config,
+		logBuffer: make([]string, 0, 100),
 	}
 
 	if l.config.LogFile != "" {
@@ -50,6 +53,8 @@ func New(tomlConfig string) (*Lagra, error) {
 	if l.config.LogLevel != "" {
 		l.SetLogLevel(l.config.LogLevel)
 	}
+
+	go l.flushLogBuffer()
 
 	return l, nil
 }
@@ -84,9 +89,10 @@ func (l *Lagra) send(logType LogType, message string, customLogPath ...string) e
 
 	if logFilePath != "" {
 		if l.logFile != nil {
-			_, err := l.logFile.WriteString(logMessage)
-			if err != nil {
-				return err // Return error if there's an issue writing to the log file
+			l.logBuffer = append(l.logBuffer, logMessage)
+			atomic.AddInt32(&l.logCounter, 1)
+			if l.logCounter >= 100 {
+				l.flushLogBuffer()
 			}
 		} else {
 			fmt.Println("Log file is not set. Message will not be logged to a file.")
@@ -143,4 +149,19 @@ func (l *Lagra) SetLogLevel(level string) {
 	}
 
 	fmt.Printf("Log level set to %s\n", level)
+}
+
+// flushLogBuffer writes the log buffer to the log file and resets the buffer and counter.
+func (l *Lagra) flushLogBuffer() {
+	l.logMutex.Lock()
+	defer l.logMutex.Unlock()
+
+	if l.logFile != nil && len(l.logBuffer) > 0 {
+		_, err := l.logFile.WriteString(strings.Join(l.logBuffer, ""))
+		if err != nil {
+			fmt.Printf("Failed to write to log file: %v\n", err)
+		}
+		l.logBuffer = l.logBuffer[:0]
+		atomic.StoreInt32(&l.logCounter, 0)
+	}
 }
