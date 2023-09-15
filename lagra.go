@@ -166,3 +166,25 @@ func (l *Lagra) flushLogBuffer() {
 		atomic.StoreInt32(&l.logCounter, 0)
 	}
 }
+
+type ErrorCollector struct {
+    errors []error
+}
+
+func New() *ErrorCollector {
+    return &ErrorCollector{}
+}
+
+func (ec *ErrorCollector) N(err error) {
+    if err != nil {
+        ec.errors = append(ec.errors, err)
+    }
+}
+
+func (ec *ErrorCollector) Handle() bool {
+    return len(ec.errors) > 0
+}
+
+func (ec *ErrorCollector) Errors() []error {
+    return ec.errors
+}
