@@ -188,3 +188,28 @@ func (ec *ErrorCollector) Handle() bool {
 func (ec *ErrorCollector) Errors() []error {
     return ec.errors
 }
+
+type StrSelect struct {
+    strMap map[string]string
+}
+
+func NewStrSelect() *StrSelect {
+    return &StrSelect{
+        strMap: make(map[string]string),
+    }
+}
+
+func (s *StrSelect) SetStr(strName, value string) {
+    s.strMap[strName] = value
+}
+
+func (s *StrSelect) SelectStr(strName, delimiter string) string {
+    if str, ok := s.strMap[strName]; ok {
+        startIdx := strings.Index(str, delimiter)
+        endIdx := strings.LastIndex(str, delimiter)
+        if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+            return str[startIdx+len(delimiter) : endIdx]
+        }
+    }
+    return ""
+}
