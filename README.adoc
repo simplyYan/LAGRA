@@ -14,7 +14,7 @@ To get started with LAGRA, you can add it to your Go project using `go get`:
 
 [source,shell]
 ----
-go get github.com/simplyYan/LAGRA
+go get -u github.com/simplyYan/LAGRA
 ----
 
 == Documentation
