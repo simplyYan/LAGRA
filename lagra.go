@@ -1,7 +1,7 @@
 package lagra
 
-import (
-	"context"
+import ( 
+	"context" //Import the necessary packages:
 	"fmt"
 	"os"
         "strings"
@@ -14,13 +14,13 @@ import (
 
 type LogType string
 
-const (
+const ( //Defines log levels/intensities
 	Info  LogType = "INFO"
 	Warn  LogType = "WARN"
 	Error LogType = "ERROR"
 )
 
-type Lagra struct {
+type Lagra struct { //The main structure of LAGRA
 	logFile  *os.File
 	logMutex sync.Mutex
 	config   *LagraConfig
@@ -28,7 +28,7 @@ type Lagra struct {
 	logCounter int32
 }
 
-type LagraConfig struct {
+type LagraConfig struct { //Define the settings
 	LogFile  string `toml:"log_file"`
 	LogLevel string `toml:"log_level"`
 }
@@ -167,11 +167,11 @@ func (l *Lagra) flushLogBuffer() {
 	}
 }
 
-type ErrorCollector struct {
+type ErrorCollector struct { //The main structure of LAGRER
     errors []error
 }
 
-func New() *ErrorCollector {
+func New() *ErrorCollector { //LAGRER's "New()" function, responsible for creating a new instance
     return &ErrorCollector{}
 }
 
@@ -189,7 +189,7 @@ func (ec *ErrorCollector) Errors() []error {
     return ec.errors
 }
 
-type StrSelect struct {
+type StrSelect struct { //The main structure of the LAGRA String Selector
     strMap map[string]string
 }
 
