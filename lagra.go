@@ -171,7 +171,7 @@ type ErrorCollector struct { //The main structure of LAGRER
     errors []error
 }
 
-func New() *ErrorCollector { //LAGRER's "New()" function, responsible for creating a new instance
+func Tracker() *ErrorCollector { //LAGRER's "New()" function, responsible for creating a new instance
     return &ErrorCollector{}
 }
 
