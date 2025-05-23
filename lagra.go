@@ -1,86 +1,126 @@
 package lagra
 
-import ( 
-	"context" //Import the necessary packages:
+import (
 	"fmt"
 	"os"
-        "strings"
 	"sync"
-	"time"
 	"sync/atomic"
-	"github.com/BurntSushi/toml"
-	"github.com/fatih/color"
+	"time"
 )
 
+// LogType represents the type of log message.
 type LogType string
 
-const ( //Defines log levels/intensities
+const (
 	Info  LogType = "INFO"
 	Warn  LogType = "WARN"
 	Error LogType = "ERROR"
 )
 
-type Lagra struct { //The main structure of LAGRA
-	logFile  *os.File
-	logMutex sync.Mutex
-	config   *LagraConfig
-	logBuffer []string
-	logCounter int32
+// LagraConfig holds the configuration for the Lagra logger.
+type LagraConfig struct {
+	LogFile    string // Path to the log file.
+	EnableColor bool   // Enable colored terminal output.
 }
 
-type LagraConfig struct { //Define the settings
-	LogFile  string `toml:"log_file"`
-	LogLevel string `toml:"log_level"`
+// Lagra is the main struct for the logger.
+type Lagra struct {
+	config      LagraConfig
+	logFile     *os.File
+	logBuffer   []string
+	logCounter  int32
+	logMutex    sync.Mutex
+	stopChannel chan struct{}
 }
 
-// New creates a new Lagra logger instance with optional TOML configuration.
-func New(tomlConfig string) (*Lagra, error) {
-	var config LagraConfig
-	if tomlConfig != "" {
-		if _, err := toml.Decode(tomlConfig, &config); err != nil {
-			return nil, err
+// NewLagra initializes a new Lagra instance.
+func NewLagra(config LagraConfig) (*Lagra, error) {
+	lagra := &Lagra{
+		config:      config,
+		logBuffer:   make([]string, 0, 100),
+		stopChannel: make(chan struct{}),
+	}
+
+	if config.LogFile != "" {
+		file, err := os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open log file: %v", err)
+		}
+		lagra.logFile = file
+		go lagra.periodicFlush()
+	}
+
+	return lagra, nil
+}
+
+// Close shuts down the logger and flushes any remaining logs.
+func (l *Lagra) Close() {
+	close(l.stopChannel)
+	l.flushLogBuffer()
+	if l.logFile != nil {
+		l.logFile.Close()
+	}
+}
+
+// periodicFlush periodically flushes the log buffer to the file.
+func (l *Lagra) periodicFlush() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			l.flushLogBuffer()
+		case <-l.stopChannel:
+			return
 		}
 	}
-
-	l := &Lagra{
-		config: &config,
-		logBuffer: make([]string, 0, 100),
-	}
-
-	if l.config.LogFile != "" {
-		l.SetLogFile(l.config.LogFile)
-	}
-
-	if l.config.LogLevel != "" {
-		l.SetLogLevel(l.config.LogLevel)
-	}
-
-	go l.flushLogBuffer()
-
-	return l, nil
 }
 
-// send logs a message with the specified log type and an optional custom log file path.
+// flushLogBuffer writes buffered log messages to the log file.
+func (l *Lagra) flushLogBuffer() {
+	l.logMutex.Lock()
+	defer l.logMutex.Unlock()
+
+	if l.logFile != nil && len(l.logBuffer) > 0 {
+		for _, log := range l.logBuffer {
+			l.logFile.WriteString(log)
+		}
+		l.logBuffer = l.logBuffer[:0]
+		atomic.StoreInt32(&l.logCounter, 0)
+	}
+}
+
+// colorize applies ANSI color codes to a text.
+func (l *Lagra) colorize(text string, logType LogType) string {
+	if !l.config.EnableColor {
+		return text
+	}
+
+	var colorCode string
+	switch logType {
+	case Info:
+		colorCode = "\033[32m" // Green
+	case Warn:
+		colorCode = "\033[33m" // Yellow
+	case Error:
+		colorCode = "\033[31m" // Red
+	default:
+		colorCode = "\033[0m"  // Reset
+	}
+
+	return fmt.Sprintf("%s%s\033[0m", colorCode, text)
+}
+
+// send logs a message with the specified type.
 func (l *Lagra) send(logType LogType, message string, customLogPath ...string) error {
 	l.logMutex.Lock()
 	defer l.logMutex.Unlock()
 
 	logMessage := fmt.Sprintf("%s - %s - %s\n", time.Now().Format("15:04.05.9 - 02/01/2006"), logType, message)
+	logMessageColored := l.colorize(logMessage, logType)
 
-	var textColor *color.Color
-	switch logType {
-	case Info:
-		textColor = color.New(color.FgGreen)
-	case Warn:
-		textColor = color.New(color.FgYellow)
-	case Error:
-		textColor = color.New(color.FgRed)
-	default:
-		textColor = color.New(color.Reset)
-	}
-
-	logMessageColored := textColor.SprintFunc()(logMessage)
-	fmt.Print(logMessageColored) // Print with colors
+	fmt.Print(logMessageColored)
 
 	// Use custom log file path if provided, otherwise use the configured log file
 	logFilePath := l.config.LogFile
@@ -90,7 +130,7 @@ func (l *Lagra) send(logType LogType, message string, customLogPath ...string) e
 
 	if logFilePath != "" {
 		if l.logFile != nil {
-			l.logBuffer = append(l.logBuffer, logMessage)
+			l.logBuffer = append(l.logBuffer, logMessage) // Save plain text (no ANSI) to file
 			atomic.AddInt32(&l.logCounter, 1)
 			if l.logCounter >= 100 {
 				l.flushLogBuffer()
@@ -100,116 +140,35 @@ func (l *Lagra) send(logType LogType, message string, customLogPath ...string) e
 		}
 	}
 
-	return nil // No error
+	return nil
 }
 
-// Info logs an informational message with optional custom log file path.
-func (l *Lagra) Info(ctx context.Context, message string, customLogPath ...string) error {
-	return l.send(Info, message, customLogPath...)
+// Info logs an informational message.
+func (l *Lagra) Info(message string) {
+	l.send(Info, message)
 }
 
-// Warn logs a warning message with optional custom log file path.
-func (l *Lagra) Warn(ctx context.Context, message string, customLogPath ...string) error {
-	return l.send(Warn, message, customLogPath...)
+// Warn logs a warning message.
+func (l *Lagra) Warn(message string) {
+	l.send(Warn, message)
 }
 
-// Error logs an error message with optional custom log file path.
-func (l *Lagra) Error(ctx context.Context, message string, customLogPath ...string) error {
-	return l.send(Error, message, customLogPath...)
+// Error logs an error message.
+func (l *Lagra) Error(message string) {
+	l.send(Error, message)
 }
 
-// SetLogFile sets the log file path.
-func (l *Lagra) SetLogFile(filePath string) {
-	l.logMutex.Lock()
-	defer l.logMutex.Unlock()
-
-	if l.logFile != nil {
-		_ = l.logFile.Close()
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		fmt.Printf("Failed to create log file: %v\n", err)
-		return
-	}
-
-	l.logFile = file
+// InfoWithCustomFile logs an informational message to a custom log file.
+func (l *Lagra) InfoWithCustomFile(message, customLogPath string) {
+	l.send(Info, message, customLogPath)
 }
 
-// SetLogLevel sets the log level (INFO, WARN, ERROR).
-func (l *Lagra) SetLogLevel(level string) {
-	switch level {
-	case "INFO":
-		// Set log level to INFO
-	case "WARN":
-		// Set log level to WARN
-	case "ERROR":
-		// Set log level to ERROR
-	default:
-		level = "INFO" // Default log level
-	}
-
-	fmt.Printf("Log level set to %s\n", level)
+// WarnWithCustomFile logs a warning message to a custom log file.
+func (l *Lagra) WarnWithCustomFile(message, customLogPath string) {
+	l.send(Warn, message, customLogPath)
 }
 
-// flushLogBuffer writes the log buffer to the log file and resets the buffer and counter.
-func (l *Lagra) flushLogBuffer() {
-	l.logMutex.Lock()
-	defer l.logMutex.Unlock()
-
-	if l.logFile != nil && len(l.logBuffer) > 0 {
-		_, err := l.logFile.WriteString(strings.Join(l.logBuffer, ""))
-		if err != nil {
-			fmt.Printf("Failed to write to log file: %v\n", err)
-		}
-		l.logBuffer = l.logBuffer[:0]
-		atomic.StoreInt32(&l.logCounter, 0)
-	}
-}
-
-type ErrorCollector struct { //The main structure of LAGRER
-    errors []error
-}
-
-func Tracker() *ErrorCollector { //LAGRER's "New()" function, responsible for creating a new instance
-    return &ErrorCollector{}
-}
-
-func (ec *ErrorCollector) N(err error) {
-    if err != nil {
-        ec.errors = append(ec.errors, err)
-    }
-}
-
-func (ec *ErrorCollector) Handle() bool {
-    return len(ec.errors) > 0
-}
-
-func (ec *ErrorCollector) Errors() []error {
-    return ec.errors
-}
-
-type StrSelect struct { //The main structure of the LAGRA String Selector
-    strMap map[string]string
-}
-
-func NewStrSelect() *StrSelect {
-    return &StrSelect{
-        strMap: make(map[string]string),
-    }
-}
-
-func (s *StrSelect) SetStr(strName, value string) {
-    s.strMap[strName] = value
-}
-
-func (s *StrSelect) SelectStr(strName, delimiter string) string {
-    if str, ok := s.strMap[strName]; ok {
-        startIdx := strings.Index(str, delimiter)
-        endIdx := strings.LastIndex(str, delimiter)
-        if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-            return str[startIdx+len(delimiter) : endIdx]
-        }
-    }
-    return ""
+// ErrorWithCustomFile logs an error message to a custom log file.
+func (l *Lagra) ErrorWithCustomFile(message, customLogPath string) {
+	l.send(Error, message, customLogPath)
 }
